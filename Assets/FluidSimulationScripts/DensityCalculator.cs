@@ -17,15 +17,7 @@ public class DensityCalculator : MonoBehaviour
     [SerializeField] private float speed;
     [SerializeField] private float nearDensityThreashhold = .2f;
     //private Particle[] particles;
-    private Vector2 position = Vector2.zero;
-    private Drawing graphics;
     [SerializeField] private TextMeshProUGUI _textMeshPro;
-
-    // Start is called before the first frame update
-    void Start()
-    {
-        graphics = Drawing.Instance;
-    }
 
     // Update is called once per frame
     void LateUpdate()

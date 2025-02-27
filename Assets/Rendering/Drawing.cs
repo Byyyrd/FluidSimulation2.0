@@ -1,7 +1,7 @@
 using System;
 using UnityEditor;
 using UnityEngine;
-
+using UnityEngine.Assertions;
 public class Drawing : MonoBehaviour
 {
     private static Drawing _Instance;
@@ -45,7 +45,9 @@ public class Drawing : MonoBehaviour
         colors[colorIndex++] = (Vector4)color;
 
         //Set Colors in Shader to use with instance Id
-        block.SetVectorArray("_Colors", colors);
+        Assert.IsNotNull(block);
+		
+		block.SetVectorArray("_Colors", colors);
     }
     private void Setup()
     {
@@ -99,7 +101,7 @@ public class Drawing : MonoBehaviour
         return mesh;
     }
 
-    private void Start()
+    private void Awake()
     {
         Setup();
     }

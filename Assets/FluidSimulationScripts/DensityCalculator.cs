@@ -20,8 +20,8 @@ public class DensityCalculator : MonoBehaviour
     [SerializeField] private TextMeshProUGUI _textMeshPro;
 
     // Update is called once per frame
-    void LateUpdate()
-    {
+    //void LateUpdate()
+    //{
         //Parallel.ForEach(particles, particle => {
         //    if (particle != null)
         //    {
@@ -37,11 +37,10 @@ public class DensityCalculator : MonoBehaviour
         //	position = Camera.main.ScreenToWorldPoint(Input.mousePosition);
         //}
         //float density = CalculateDensity(position);
-    }
+    //}
     public void CalculateDensitie(Particle particle)
     {
         particle.density = CalculateDensity(particle.predictedPosition, particle.neighbours);
-
     }
     public void CalculateVelocity(Particle particle)
     {

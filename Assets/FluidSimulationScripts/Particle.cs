@@ -21,4 +21,11 @@ public class Particle
         return (x,y);
 
 	}
+	public (int, int) GetPredictedIndexPair()
+	{
+		int x = (int)predictedPosition.x + (int)Mathf.Ceil(CalculateParticals.BoundsSize.x / 2) + 1;
+		int y = (int)predictedPosition.y + (int)Mathf.Ceil(CalculateParticals.BoundsSize.y / 2) + 1;
+		return (x, y);
+
+	}
 }

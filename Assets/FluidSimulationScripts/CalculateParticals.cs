@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Unity.Mathematics;
 using UnityEngine;
 using static UnityEngine.ParticleSystem;
 
@@ -44,15 +45,12 @@ public class CalculateParticals : MonoBehaviour
 	// Update is called once per frame
 	void Update()
     {
-        //CreateParticles();
-        Mesh mesh = new Mesh();
-        mesh.Clear();
-        Vector3[] vertices = new Vector3[particleIndex];
-        
         for (uint i = 0; i < particleIndex; i++)
         {
             Particle particle = particles[i];
-            particle.predictedPosition = particle.position + (new Vector2(0, gravity) + new Vector2(0, -gravity * Time.deltaTime) + particle.velocity) * Time.deltaTime;
+			//particle.velocity += new Vector2(0, gravity);
+			//particle.velocity += new Vector2(0, -gravity * Time.deltaTime);
+			particle.predictedPosition = particle.position + particle.velocity * Time.deltaTime;
         }
         for (uint i = 0; i < particleIndex; i++)
         {
@@ -68,12 +66,10 @@ public class CalculateParticals : MonoBehaviour
         {
             Particle particle = particles[i];
 			dc.CalculateVelocity(particle);
-            particle.velocity += new Vector2(0, gravity);
-            particle.velocity += new Vector2(0, -gravity * Time.deltaTime);
-            particle.position += particle.velocity * Time.deltaTime;
-            HandleCollisions(i);
-            (int x, int y) = particle.GetIndexPair();
-            //Debug.Log($"Position: {particle.position}, x: {x},y: {y}");
+			particle.position += particle.velocity * Time.deltaTime;
+			HandleCollisions(i);
+			(int x, int y) = particle.GetIndexPair();
+           // Debug.Log($"Position: {particle.position}, x: {x},y: {y}");
             grid[x, y].Add(particle);
             Color color = Color.white;
             if (particle.density > dc.targetDensity)
@@ -81,16 +77,12 @@ public class CalculateParticals : MonoBehaviour
             if (particle.density < dc.targetDensity)
                 color = Color.blue;
             graphics.DrawCircle(particle.position.x, particle.position.y, radius, color);
-            vertices[i] = particle.position;
         }
-        mesh.vertices = vertices;
-        mesh.RecalculateNormals();
-        GetComponent<MeshFilter>().mesh = mesh;
     }
 	private List<Particle> GetNeigboringParticles(Particle particle)
     {
         List<Particle> otherParticles = new();
-		(int x, int y) = particle.GetIndexPair();
+		(int x, int y) = particle.GetPredictedIndexPair();
         (int, int)[] gridIndex = {
             (x - 1, y - 1), (x + 0, y - 1), (x + 1, y - 1),
             (x - 1, y + 0), (x + 0, y + 0), (x + 1, y + 0),
@@ -103,6 +95,7 @@ public class CalculateParticals : MonoBehaviour
                otherParticles.AddRange(grid[i, j]);
             }
         }
+        //otherParticles.Remove(particle);
         return otherParticles;
     }
     private void CreateRandomParticles()
@@ -162,10 +155,8 @@ public class CalculateParticals : MonoBehaviour
         Particle particle = particles[particleIndex];
         Vector2 vel = particle.velocity;
         Vector2 pos = particle.position;
-        pos.y -= radius / 2;
-
-        // Keep particle inside bounds
-        Vector2 halfSize = Vector2.Scale(boundsSize, new(0.5f,0.5f));
+		// Keep particle inside bounds
+		Vector2 halfSize = Vector2.Scale(boundsSize, new(0.5f,0.5f));
         Vector2 edgeDst = halfSize - new Vector2(Mathf.Abs(pos.x),Mathf.Abs(pos.y));
 
         if (edgeDst.x <= 0)
@@ -178,12 +169,9 @@ public class CalculateParticals : MonoBehaviour
             pos.y = halfSize.y * Mathf.Sign(pos.y);
             vel.y *= -1 * collisionDamping;
         }
-
-
-        pos.y += radius / 2;
-        // Update position and velocity
-        particle.position = pos ;
+		// Update position and velocity
+		particle.position = pos;
         particle.velocity = vel;
-    }
+	}
 
 }

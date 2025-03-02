@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Assertions;
@@ -21,10 +23,10 @@ public class Drawing : MonoBehaviour
 
     [SerializeField] private Material material;
 
-    private Matrix4x4[] matrices = new Matrix4x4[1023];
+    private List<Matrix4x4[]> matrices = new ();
     private int matrixIndex = 0;
 
-    private Vector4[] colors = new Vector4[1023];
+    private List<Vector4[]> colors = new ();
     private int colorIndex = 0;
     
     private MaterialPropertyBlock block;
@@ -41,24 +43,35 @@ public class Drawing : MonoBehaviour
         Vector3 scale = 2 * radius * Vector3.one;
         Matrix4x4 mat = Matrix4x4.TRS(position,rotation,scale);
 
-        matrices[matrixIndex++] = mat;
-        colors[colorIndex++] = (Vector4)color;
+        
 
-        //Set Colors in Shader to use with instance Id
-        Assert.IsNotNull(block);
-		
-		block.SetVectorArray("_Colors", colors);
+        matrices.Last()[matrixIndex++] = mat;
+        colors.Last()[colorIndex++] = (Vector4)color;
+        if(matrixIndex >= 1022)
+        {
+            matrixIndex = 0;
+            matrices.Add(new Matrix4x4[1022]);
+        }
+		if (colorIndex >= 1022)
+		{
+			colorIndex = 0;
+			colors.Add(new Vector4[1022]);
+		}
+
+
     }
     private void Setup()
     {
         //TODO: Better alternative for loading Material
+        matrices.Add(new Matrix4x4[1022]);
+        colors.Add(new Vector4[1022]);
         material = Resources.Load("ParticleMaterial") as Material;
         mesh = CreateQuad();
         material.enableInstancing = true;
         block = new MaterialPropertyBlock();
     }
-
-    private Mesh CreateQuad(float width = 1f, float height = 1f)
+	
+	private Mesh CreateQuad(float width = 1f, float height = 1f)
     {
         // Create a quad mesh.
         var mesh = new Mesh();
@@ -109,13 +122,22 @@ public class Drawing : MonoBehaviour
     private void Update()
     {
         // Draw a bunch of meshes each frame.
-        Graphics.DrawMeshInstanced(mesh, 0, material, matrices, matrixIndex, block);
+        int i = 0;
+        foreach (Matrix4x4[] matrixArray in matrices)
+        {
+			//Set Colors in Shader to use with instance Id
+			block.SetVectorArray("_Colors", colors[i]);
+			Graphics.DrawMeshInstanced(mesh, 0, material, matrixArray, matrixArray.Length, block);
+            i++;
+        }
 
         //Cleanup
-        Array.Clear(matrices, 0,matrixIndex);
-        Array.Clear(colors, 0, colorIndex);
-        colorIndex = 0;
+        matrices = new();
+        colors = new();
+		matrices.Add(new Matrix4x4[1022]);
+		colors.Add(new Vector4[1022]);
+		colorIndex = 0;
         matrixIndex = 0;
-        block.SetVectorArray("_Colors", colors);
+        block.SetVectorArray("_Colors", colors.First());
     }
 }

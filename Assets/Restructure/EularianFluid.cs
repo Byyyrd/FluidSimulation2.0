@@ -16,7 +16,7 @@ public class EularianFluid : MonoBehaviour
 {
 	[Header("Grid Values")]
 
-	[Range(0, 1023)][SerializeField] private int population;
+	[Range(0, 4000)][SerializeField] private int population;
 	[Range(0, 1)][SerializeField] private float collisionDamping;
 	[SerializeField] private Vector2 Boundaries;
 	[SerializeField] private Vector2 gravity;
@@ -26,7 +26,7 @@ public class EularianFluid : MonoBehaviour
 
 	[Header("Particle Values")]
 	[SerializeField] private float radius;
-	[SerializeField] private float smoothingRadius;
+	[SerializeField] private float smoothingRadius = 1f;
 	[SerializeField] private float nearDensityThreashhold = .5f;
 	[SerializeField] private float targetDensity = 1f;
 	[SerializeField] private float pressureForce = 1f;
@@ -34,14 +34,15 @@ public class EularianFluid : MonoBehaviour
 
 	[Header("Debug")]
 	[SerializeField] private TMP_Text display;
-	private Vector2 probePosition;
-	private Drawing graphics;
-	public static Vector2 Bounds;
 	[SerializeField] private float speed;
 	[SerializeField] private float force;
 	[SerializeField] private float range;
+	[SerializeField] private float mass = 1f;
 	[SerializeField] private float edgeParticleDist = .125f;
 	private Vector2 externalForces = Vector2.zero;
+	private Vector2 probePosition;
+	private Drawing graphics;
+	public static Vector2 Bounds;
 
 
 	public void Start()
@@ -61,7 +62,7 @@ public class EularianFluid : MonoBehaviour
 
 		
 		graphics = Drawing.Instance;
-		CreateRandomParticles();
+		CreateParticles();
 		//foreach (EularianParticle particle in particles)
 		//{
 		//	particle.velocity = particle.position.normalized;
@@ -102,21 +103,25 @@ public class EularianFluid : MonoBehaviour
 				Vector2 viscosity = viscosityStrenght * CalculateViscosity(particle);
 				Vector2 pressure = CalculatePressure(particle);
 				externalForces = Vector2.zero;
-				if (Input.GetMouseButton(0))
+				if (Input.GetMouseButton(0) || Input.GetMouseButton(1))
 				{
 					probePosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
 					Vector2 moveToMouse = probePosition - particle.predictedPosition;
 					if(moveToMouse.magnitude < range)
 					{
 						//particle.velocity = Vector2.zero;
-						externalForces = moveToMouse.normalized * force;
+						if (Input.GetMouseButton(1))
+						{
+							moveToMouse *= -1;
+						}
+						externalForces = moveToMouse.normalized * force - particle.velocity;
 					}
 				}
 				particle.velocity += (Time.deltaTime / mass) * (viscosity + gravity + externalForces);
 				particle.velocity += (Time.deltaTime / mass) * pressure;
 				particle.position += speed * particle.velocity * Time.deltaTime;
 				HandleCollisions(particle);
-				(int xIndex, int yIndex) = particle.GetIndexPair();
+				(int xIndex, int yIndex) = particle.GetPredictedIndexPair();
 				grid[xIndex, yIndex].Add(particle);
 				graphics.DrawCircle(particle.position.x, particle.position.y, radius, Color.blue);
 			}
@@ -142,15 +147,14 @@ public class EularianFluid : MonoBehaviour
 	private Vector2 CalculatePressure(EularianParticle particle)
 	{
 		Vector2 pressureGradient = Vector2.zero;
-		float mass = 1f;
-		float pressure = pressureForce * (particle.density - targetDensity);
+		float pressure = PressureFromDensity(particle.density);
 		float particlePressureGradient = pressure / Mathf.Pow(particle.density, 2);
 		foreach (EularianParticle otherParticle in particle.neighbours)
 		{
 			if (otherParticle != null && otherParticle != particle)
 			{
 				Vector2 dir = (otherParticle.predictedPosition - particle.predictedPosition).normalized;
-				float otherPressure = pressureForce * (otherParticle.density - targetDensity);
+				float otherPressure = PressureFromDensity(otherParticle.density);
 				float otherParticlePressureGradient = otherPressure / Mathf.Pow(otherParticle.density, 2);
 				float distance = (otherParticle.predictedPosition - particle.predictedPosition).magnitude;
 				pressureGradient += mass * (particlePressureGradient + otherParticlePressureGradient) * W1(distance, smoothingRadius) * dir;
@@ -159,11 +163,14 @@ public class EularianFluid : MonoBehaviour
 		}
 		return pressureGradient;
 	}
-
+	private float PressureFromDensity(float density)
+	{
+		//return pressureForce * (Mathf.Pow(density / targetDensity, 1) - 1);
+		return pressureForce * (density - targetDensity);
+	}
 	private Vector2 CalculateViscosity(EularianParticle particle)
 	{
 		Vector2 viscosity = Vector2.zero;
-		float mass = 1f;
 		foreach (EularianParticle otherParticle in particle.neighbours)
 		{
 			if (otherParticle != null && otherParticle != particle)
@@ -188,51 +195,87 @@ public class EularianFluid : MonoBehaviour
 	private float CalculateDensity(EularianParticle particle)
 	{
 		float density = 0;
-		float mass = 1;
-		float volume = (7 * Mathf.PI * Mathf.Pow(smoothingRadius, 2)) / 40;
 		foreach (EularianParticle otherParticle in particle.neighbours)
 		{
 			if (otherParticle != null)
 			{
 				float dist = (otherParticle.position - particle.position).magnitude;
 				float influence = W(dist,smoothingRadius);
+				//if (dist > nearDensityThreashhold)
+				//{
+				//	influence = SmoothingFunction(dist,smoothingRadius);
+				//}
+				//else
+				//{
+				//	influence = SmoothingFunction(dist, smoothingRadius);
+				//}
 				
-				density += influence * mass / volume;
+				density += influence * mass;
 			}
 
 		}
 		return density;
 	}
+	
 	private float CalculateDensityAtPosition(Vector2 position)
 	{
 		float density = 0;
-		float mass = 1;
 		float volume = (7 * Mathf.PI * Mathf.Pow(smoothingRadius, 2)) / 40;
 		foreach (EularianParticle otherParticle in particles)
 		{
 			if (otherParticle != null)
 			{
 				float dist = (otherParticle.position - position).magnitude;
-				float influence = W(dist, smoothingRadius);
-				density += influence * mass / volume;
+				float influence = W(dist,smoothingRadius);
+				//if (dist > nearDensityThreashhold)
+				//{
+				//	influence = SmoothingFunction(dist, smoothingRadius);
+				//}
+				//else
+				//{
+				//	influence = SmoothingFunction(dist, smoothingRadius);
+				//}
+				density += influence * mass;
 			}
 
 		}
 		return density;
 	}
 
+	public float SmoothingFunction(float distance, float radius)
+	{
+		float volume = (Mathf.PI * Mathf.Pow(radius, 2)) / 6;
+		if (distance < radius)
+		{
+			float value = Mathf.Pow((distance - radius), 2) / Mathf.Pow(radius, 2);
+			return value / volume;
+		}
+		return 0;
 
+	}
+	public float SmoothingFunctionDerivative(float distance, float radius)
+	{
+		float volume = (Mathf.PI * Mathf.Pow(radius, 2)) / 6;
+
+		if (distance < radius)
+		{
+			float value = (2 * (distance - radius)) / Mathf.Pow(radius, 2);
+			return value / volume;
+		}
+		return 0;
+	}
 
 	private float W(float r,float h)
 	{
 		float q = (1 / h) * Mathf.Abs(r);
-		if(0 <= q && q <= nearDensityThreashhold)
+		float norm = 40/(7 * Mathf.PI * Mathf.Pow(smoothingRadius, 2));
+		if (0 <= q && q <= 0.5)
 		{
-			return 6 * (Mathf.Pow(q, 3) - Mathf.Pow(q, 2)) + 1;
+			return (6 * (Mathf.Pow(q, 3) - Mathf.Pow(q, 2)) + 1) * norm;
 		}
-		else if (nearDensityThreashhold <= q && q <= 1)
+		else if (0.5 <= q && q <= 1)
 		{
-			return 2 * Mathf.Pow(1-q,3);
+			return (2 * Mathf.Pow(1-q,3)) * norm;
 		}
 		else
 		{
@@ -242,13 +285,14 @@ public class EularianFluid : MonoBehaviour
 	private float W1(float r, float h)
 	{
 		float q = (1 / h) * Mathf.Abs(r);
-		if (0 <= q && q <= nearDensityThreashhold)
+		float norm = 40 / (7 * Mathf.PI * Mathf.Pow(smoothingRadius, 2));
+		if (0 <= q && q <= 0.5)
 		{
-			return 6 * q * (3 * q - 2);
+			return (6 * q * (3 * q - 2)) * norm;
 		}
-		else if (nearDensityThreashhold <= q && q <= 1)
+		else if (0.5 <= q && q <= 1)
 		{
-			return -6 * Mathf.Pow(1 - q, 2);
+			return (-6 * Mathf.Pow(1 - q, 2)) * norm;
 		}
 		else
 		{
@@ -293,6 +337,7 @@ public class EularianFluid : MonoBehaviour
 
 	public void OnDrawGizmos()
 	{
+#if UNITY_EDITOR
 		if (!EditorApplication.isPlaying)
 		{
 			CreateParticles();
@@ -314,6 +359,7 @@ public class EularianFluid : MonoBehaviour
 			//	Gizmos.DrawRay(particle.position, particle.velocity);
 			//}
 		}
+#endif
 		Gizmos.DrawWireCube(Vector2.zero, Boundaries);
 	}
 
@@ -335,11 +381,16 @@ public class EularianFluid : MonoBehaviour
 			float x = xOrigin + radius * 2 * i;
 			float xOffset = rowSize * radius * 2 * rowIndex;
 			particles[i] = new(new(x - xOffset + radius, y-radius), Vector3.zero);
+#if UNITY_EDITOR
 			if (EditorApplication.isPlaying)
 			{
 				(int xIndex, int yIndex) = particles[i].GetIndexPair();
 				grid[xIndex, yIndex].Add(particles[i]);
 			}
+#else
+			(int xIndex, int yIndex) = particles[i].GetIndexPair();
+			grid[xIndex, yIndex].Add(particles[i]);
+#endif
 		}
 	}
 	private void CreateRandomParticles()
@@ -387,7 +438,7 @@ public class EularianFluid : MonoBehaviour
 	}
 	private void NewParticle(ref EularianParticle[] array,int index,Vector2 position,Vector2 velocity)
 	{
-		array[index] = new EularianParticle(position,velocity/2);
+		array[index] = new EularianParticle(position,(velocity/2 + gravity) * 0);
 		(int x, int y) = array[index].GetIndexPair();
 		grid[x, y].Add(array[index]);
 	}

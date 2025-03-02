@@ -107,7 +107,7 @@ public class DensityCalculator : MonoBehaviour
             }
             float otherPressure = CalculatePressure(otherParticle);
             float pressure = CalculatePressure(particle);
-            pressureGradient += ((otherPressure + pressure) / 2 * particle.density) * gradient * mass * dir;
+            pressureGradient += ((otherPressure + pressure) / 2 * otherParticle.density) * gradient * mass * dir;
         }
 
         return -pressureGradient;
@@ -268,7 +268,7 @@ public class DensityCalculator : MonoBehaviour
 
     public float Spikey(float distance, float radius)
     {
-        return (15 / (Mathf.PI * radius * 6)) * Mathf.Pow((radius - distance), 3);
+        return (15 / (Mathf.PI * Mathf.Pow(radius , 6))) * Mathf.Pow((radius - distance), 3);
     }
 
     public float SpikeyDerivative(float distance, float radius)

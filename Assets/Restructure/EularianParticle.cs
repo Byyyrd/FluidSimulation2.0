@@ -25,8 +25,8 @@ public class EularianParticle
 	}
 	public (int, int) GetPredictedIndexPair()
 	{
-		int x = (int)predictedPosition.x + (int)Mathf.Ceil(EularianFluid.Bounds.x / 2) + 1;
-		int y = (int)predictedPosition.y + (int)Mathf.Ceil(EularianFluid.Bounds.y / 2) + 1;
+		int x = (int)((position.x + velocity.x * Time.deltaTime) + Mathf.Ceil(EularianFluid.Bounds.x / 2)) + 1;
+		int y = (int)((position.y + velocity.y * Time.deltaTime) + Mathf.Ceil(EularianFluid.Bounds.y / 2)) + 1;
 		return (x, y);
 
 	}

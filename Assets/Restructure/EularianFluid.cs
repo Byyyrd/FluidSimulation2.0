@@ -12,6 +12,7 @@ using UnityEngine.UIElements;
 using static UnityEngine.ParticleSystem;
 
 // Source: https://sph-tutorial.physics-simulation.org/pdf/SPH_Tutorial.pdf
+// https://sph-tutorial.physics-simulation.org
 public class EularianFluid : MonoBehaviour
 {
 	[Header("Grid Values")]
@@ -39,6 +40,8 @@ public class EularianFluid : MonoBehaviour
 	[SerializeField] private float range;
 	[SerializeField] private float mass = 1f;
 	[SerializeField] private float edgeParticleDist = .125f;
+	[SerializeField] private float densityError = 1f;
+
 	private Vector2 externalForces = Vector2.zero;
 	private Vector2 probePosition;
 	private Drawing graphics;
@@ -73,9 +76,9 @@ public class EularianFluid : MonoBehaviour
 
 	public void Update()
 	{
-		if(Time.deltaTime < .2f)
+		if (Time.deltaTime < .2f)
 		{
-			
+
 			AnalyticalTools();
 			foreach (EularianParticle particle in edgeParticles)
 			{
@@ -85,29 +88,31 @@ public class EularianFluid : MonoBehaviour
 					particle.density = CalculateDensity(particle);
 					particle.predictedPosition = particle.position;
 				}
-					//particle.density = 1;
+				//particle.density = 1;
 			}
+			float avgDensity = 0;
 			foreach (EularianParticle particle in particles)
 			{
 				particle.neighbours = GetNeigboringParticles(particle);
 				particle.density = CalculateDensity(particle);
+				avgDensity += particle.density;
 				particle.predictedPosition = particle.position + particle.velocity * Time.deltaTime;
 			}
+			avgDensity /= population;
+			Debug.Log(avgDensity);
 			foreach (List<EularianParticle> partilceList in grid)
 			{
 				partilceList.Clear();
 			}
 			foreach (EularianParticle particle in particles)
 			{
-				float mass = 1;
 				Vector2 viscosity = viscosityStrenght * CalculateViscosity(particle);
-				Vector2 pressure = CalculatePressure(particle);
 				externalForces = Vector2.zero;
 				if (Input.GetMouseButton(0) || Input.GetMouseButton(1))
 				{
 					probePosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
 					Vector2 moveToMouse = probePosition - particle.predictedPosition;
-					if(moveToMouse.magnitude < range)
+					if (moveToMouse.magnitude < range)
 					{
 						//particle.velocity = Vector2.zero;
 						if (Input.GetMouseButton(1))
@@ -117,14 +122,48 @@ public class EularianFluid : MonoBehaviour
 						externalForces = moveToMouse.normalized * force - particle.velocity;
 					}
 				}
-				particle.velocity += (Time.deltaTime / mass) * (viscosity + gravity + externalForces);
+				Vector2 anonp = (Time.deltaTime / mass) * (viscosity + gravity + externalForces);
+				particle.velocity += anonp;
+				particle.predictedPosition += anonp * Time.deltaTime;
+			}
+
+			foreach (EularianParticle particle in particles)
+			{
+
+				float predictedDensity = 0;
+				foreach (EularianParticle otherParticle in particle.neighbours)
+				{
+					float distance = (particle.predictedPosition - otherParticle.predictedPosition).magnitude;
+					if (distance > nearDensityThreashhold)
+					{
+						predictedDensity += mass * (particle.velocity - otherParticle.velocity).magnitude * W1(distance, smoothingRadius);
+					}
+					else
+					{
+						predictedDensity += mass * (particle.velocity - otherParticle.velocity).magnitude * SmoothingFunctionDerivative(distance, smoothingRadius);
+					}
+					
+				}
+				predictedDensity *= Time.deltaTime;
+				predictedDensity += particle.density;
+				particle.pressure = PressureFromDensity(predictedDensity);
+			}
+			foreach (EularianParticle particle in particles)
+			{
+				Vector2 pressure = CalculatePressure(particle);
 				particle.velocity += (Time.deltaTime / mass) * pressure;
+			}
+			
+			foreach (EularianParticle particle in particles)
+			{
 				particle.position += speed * particle.velocity * Time.deltaTime;
 				HandleCollisions(particle);
 				(int xIndex, int yIndex) = particle.GetPredictedIndexPair();
 				grid[xIndex, yIndex].Add(particle);
 				graphics.DrawCircle(particle.position.x, particle.position.y, radius, Color.blue);
+
 			}
+			
 			foreach (EularianParticle particle in edgeParticles)
 			{
 				if (particle != null)
@@ -147,17 +186,25 @@ public class EularianFluid : MonoBehaviour
 	private Vector2 CalculatePressure(EularianParticle particle)
 	{
 		Vector2 pressureGradient = Vector2.zero;
-		float pressure = PressureFromDensity(particle.density);
+		float pressure = particle.pressure;
 		float particlePressureGradient = pressure / Mathf.Pow(particle.density, 2);
 		foreach (EularianParticle otherParticle in particle.neighbours)
 		{
 			if (otherParticle != null && otherParticle != particle)
 			{
 				Vector2 dir = (otherParticle.predictedPosition - particle.predictedPosition).normalized;
-				float otherPressure = PressureFromDensity(otherParticle.density);
+				float otherPressure = otherParticle.pressure;
 				float otherParticlePressureGradient = otherPressure / Mathf.Pow(otherParticle.density, 2);
 				float distance = (otherParticle.predictedPosition - particle.predictedPosition).magnitude;
-				pressureGradient += mass * (particlePressureGradient + otherParticlePressureGradient) * W1(distance, smoothingRadius) * dir;
+				if (distance > nearDensityThreashhold)
+				{
+					pressureGradient += mass * (particlePressureGradient + otherParticlePressureGradient) * W1(distance, smoothingRadius) * dir;
+				}
+				else
+				{
+					pressureGradient += mass * (particlePressureGradient + otherParticlePressureGradient) * SmoothingFunctionDerivative(distance, smoothingRadius) * dir;
+				}
+				
 			}
 
 		}
@@ -201,15 +248,15 @@ public class EularianFluid : MonoBehaviour
 			{
 				float dist = (otherParticle.position - particle.position).magnitude;
 				float influence = W(dist,smoothingRadius);
-				//if (dist > nearDensityThreashhold)
-				//{
-				//	influence = SmoothingFunction(dist,smoothingRadius);
-				//}
-				//else
-				//{
-				//	influence = SmoothingFunction(dist, smoothingRadius);
-				//}
-				
+				if (dist > nearDensityThreashhold)
+				{
+					influence = W(dist, smoothingRadius);
+				}
+				else
+				{
+					influence = SmoothingFunction(dist, smoothingRadius);
+				}
+
 				density += influence * mass;
 			}
 

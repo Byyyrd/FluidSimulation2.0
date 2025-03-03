@@ -7,9 +7,9 @@ public class EularianParticle
 	public Vector2 position = Vector2.zero;
 	public Vector2 velocity = Vector2.zero;
 	public Vector2 predictedPosition = Vector2.zero;
+	public float pressure;
 	public List<EularianParticle> neighbours;
 	public float density = 0;
-	public Vector2 pressure = Vector2.zero;
 	public EularianParticle(Vector2 position, Vector2 velocity)
 	{
 		this.position = position;

@@ -754,7 +754,7 @@ MonoBehaviour:
   gravity: {x: 0, y: -0.5}
   radius: 0.1
   smoothingRadius: 1
-  nearDensityThreashhold: 0.5
+  nearDensityThreashhold: 1
   targetDensity: 3.5
   pressureForce: 10
   viscosityStrenght: 0.3
@@ -762,7 +762,9 @@ MonoBehaviour:
   speed: 10
   force: 10
   range: 2
+  mass: 1
   edgeParticleDist: 0.3
+  densityError: 1
 --- !u!4 &1079331498
 Transform:
   m_ObjectHideFlags: 0

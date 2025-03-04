@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using TMPro;
@@ -41,6 +42,7 @@ public class EularianFluid : MonoBehaviour
 	[SerializeField] private float mass = 1f;
 	[SerializeField] private float edgeParticleDist = .125f;
 	[SerializeField] private float densityError = 1f;
+	[SerializeField] private float timeStep = 0.1f;
 
 	private Vector2 externalForces = Vector2.zero;
 	private Vector2 probePosition;
@@ -63,7 +65,7 @@ public class EularianFluid : MonoBehaviour
 		GenerateEdgeParticles();
 
 
-		
+
 		graphics = Drawing.Instance;
 		CreateParticles();
 		//foreach (EularianParticle particle in particles)
@@ -76,7 +78,7 @@ public class EularianFluid : MonoBehaviour
 
 	public void Update()
 	{
-		if (Time.deltaTime < .2f)
+		if (Time.deltaTime < 5f)
 		{
 
 			AnalyticalTools();
@@ -85,85 +87,94 @@ public class EularianFluid : MonoBehaviour
 				if (particle != null)
 				{
 					particle.neighbours = GetNeigboringParticles(particle);
-					particle.density = CalculateDensity(particle);
-					particle.predictedPosition = particle.position;
+					particle.predictedDensity = CalculateDensity(particle);
+					particle.predictedVelocity = particle.velocity;
 				}
-				//particle.density = 1;
 			}
-			float avgDensity = 0;
-			foreach (EularianParticle particle in particles)
+			foreach(EularianParticle particle in particles)
 			{
-				particle.neighbours = GetNeigboringParticles(particle);
-				particle.density = CalculateDensity(particle);
-				avgDensity += particle.density;
-				particle.predictedPosition = particle.position + particle.velocity * Time.deltaTime;
-			}
-			avgDensity /= population;
-			Debug.Log(avgDensity);
-			foreach (List<EularianParticle> partilceList in grid)
-			{
-				partilceList.Clear();
-			}
-			foreach (EularianParticle particle in particles)
-			{
-				Vector2 viscosity = viscosityStrenght * CalculateViscosity(particle);
-				externalForces = Vector2.zero;
-				if (Input.GetMouseButton(0) || Input.GetMouseButton(1))
+				if (particle != null)
 				{
-					probePosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-					Vector2 moveToMouse = probePosition - particle.predictedPosition;
-					if (moveToMouse.magnitude < range)
+					particle.neighbours = GetNeigboringParticles(particle);
+					particle.predictedDensity = CalculateDensity(particle);
+
+				}
+			}
+			//Calculate a_nonp -> extForces + viscosity 
+ 			foreach (EularianParticle particle in particles)
+			{
+				if (particle != null)
+				{
+					externalForces = Vector2.zero;
+					if (Input.GetMouseButton(0) || Input.GetMouseButton(1))
 					{
-						//particle.velocity = Vector2.zero;
-						if (Input.GetMouseButton(1))
+						probePosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+						Vector2 moveToMouse = probePosition - particle.position;
+						if (moveToMouse.magnitude < range)
 						{
-							moveToMouse *= -1;
+							//particle.velocity = Vector2.zero;
+							if (Input.GetMouseButton(1))
+							{
+								moveToMouse *= -1;
+							}
+							externalForces = moveToMouse.normalized * force - particle.velocity;
 						}
-						externalForces = moveToMouse.normalized * force - particle.velocity;
+					}
+					particle.anonp = viscosityStrenght * CalculateViscosity(particle) + gravity + externalForces;
+					particle.predictedVelocity = particle.velocity + Time.deltaTime * particle.anonp;
+					if (float.IsNaN(particle.predictedVelocity.x))
+					{
+						Debug.Log(particle.predictedVelocity);
 					}
 				}
-				Vector2 anonp = (Time.deltaTime / mass) * (viscosity + gravity + externalForces);
-				particle.velocity += anonp;
-				particle.predictedPosition += anonp * Time.deltaTime;
 			}
-
+			//Calculate pred.denisty and pressure
 			foreach (EularianParticle particle in particles)
 			{
-
-				float predictedDensity = 0;
-				foreach (EularianParticle otherParticle in particle.neighbours)
+				if (particle != null)
 				{
-					float distance = (particle.predictedPosition - otherParticle.predictedPosition).magnitude;
-					if (distance > nearDensityThreashhold)
+					float sum = 0;
+					foreach (EularianParticle neighbour in particle.neighbours)
 					{
-						predictedDensity += mass * (particle.velocity - otherParticle.velocity).magnitude * W1(distance, smoothingRadius);
+						Vector2 direction = (neighbour.position - particle.position).normalized;
+						float distance = (neighbour.position - particle.position).magnitude;
+						sum += Vector2.Dot((particle.predictedVelocity - neighbour.predictedVelocity),direction * W1(distance,smoothingRadius));
 					}
-					else
+
+					particle.predictedDensity = CalculateDensity(particle) + Time.deltaTime * sum;
+					if (float.IsNaN(particle.predictedDensity))
 					{
-						predictedDensity += mass * (particle.velocity - otherParticle.velocity).magnitude * SmoothingFunctionDerivative(distance, smoothingRadius);
+						Debug.Log(particle.predictedDensity);
 					}
-					
+					particle.pressure = pressureForce * (particle.predictedDensity / targetDensity - 1);
 				}
-				predictedDensity *= Time.deltaTime;
-				predictedDensity += particle.density;
-				particle.pressure = PressureFromDensity(predictedDensity);
 			}
 			foreach (EularianParticle particle in particles)
 			{
-				Vector2 pressure = CalculatePressure(particle);
-				particle.velocity += (Time.deltaTime / mass) * pressure;
+				if (particle != null)
+				{
+					particle.ap = CalculatePressure(particle);
+					if(float.IsNaN(particle.ap.x) || float.IsNaN(particle.ap.y))
+					{
+						Debug.Log(particle.ap);
+					}
+				}
 			}
-			
 			foreach (EularianParticle particle in particles)
 			{
+				particle.velocity = particle.predictedVelocity + Time.deltaTime * particle.ap;
 				particle.position += speed * particle.velocity * Time.deltaTime;
+				if (float.IsNaN(particle.position.x) || float.IsNaN(particle.position.y))
+				{
+					Debug.Log(particle.position);
+				}
 				HandleCollisions(particle);
-				(int xIndex, int yIndex) = particle.GetPredictedIndexPair();
+				(int xIndex, int yIndex) = particle.GetIndexPair();
 				grid[xIndex, yIndex].Add(particle);
 				graphics.DrawCircle(particle.position.x, particle.position.y, radius, Color.blue);
 
 			}
-			
+
 			foreach (EularianParticle particle in edgeParticles)
 			{
 				if (particle != null)
@@ -172,13 +183,8 @@ public class EularianFluid : MonoBehaviour
 					grid[xIndex, yIndex].Add(particle);
 				}
 			}
-			//foreach (EularianParticle particle in edgeParticles)
-			//{
-			//	if (particle != null)
-			//		graphics.DrawCircle(particle.position.x, particle.position.y, radius, Color.green);
-			//}
 		}
-		
+
 	}
 
 
@@ -187,24 +193,23 @@ public class EularianFluid : MonoBehaviour
 	{
 		Vector2 pressureGradient = Vector2.zero;
 		float pressure = particle.pressure;
-		float particlePressureGradient = pressure / Mathf.Pow(particle.density, 2);
+		float particlePressureGradient = pressure / Mathf.Pow(particle.predictedDensity, 2);
 		foreach (EularianParticle otherParticle in particle.neighbours)
 		{
 			if (otherParticle != null && otherParticle != particle)
 			{
-				Vector2 dir = (otherParticle.predictedPosition - particle.predictedPosition).normalized;
+				Vector2 dir = (otherParticle.position - particle.position).normalized;
 				float otherPressure = otherParticle.pressure;
-				float otherParticlePressureGradient = otherPressure / Mathf.Pow(otherParticle.density, 2);
-				float distance = (otherParticle.predictedPosition - particle.predictedPosition).magnitude;
-				if (distance > nearDensityThreashhold)
+				float otherParticlePressureGradient = otherPressure / Mathf.Pow(otherParticle.predictedDensity, 2);
+				float distance = (otherParticle.position - particle.position).magnitude;
+				pressureGradient += mass * (particlePressureGradient + otherParticlePressureGradient) * W1(distance, smoothingRadius) * dir;
+				if(float.IsNaN(pressureGradient.x) || float.IsNaN(pressureGradient.y))
 				{
-					pressureGradient += mass * (particlePressureGradient + otherParticlePressureGradient) * W1(distance, smoothingRadius) * dir;
+					Debug.Log(otherPressure);
+					Debug.Log(otherParticlePressureGradient);
+					Debug.Log(distance);
 				}
-				else
-				{
-					pressureGradient += mass * (particlePressureGradient + otherParticlePressureGradient) * SmoothingFunctionDerivative(distance, smoothingRadius) * dir;
-				}
-				
+
 			}
 
 		}
@@ -222,10 +227,10 @@ public class EularianFluid : MonoBehaviour
 		{
 			if (otherParticle != null && otherParticle != particle)
 			{
-				float density = otherParticle.density;
-				float distance = (otherParticle.predictedPosition - particle.predictedPosition).magnitude;
+				float density = otherParticle.predictedDensity;
+				float distance = (otherParticle.position - particle.position).magnitude;
 				Vector2 A = otherParticle.velocity - particle.velocity;
-				if(distance != 0)
+				if (distance != 0)
 				{
 					viscosity += (mass / density) * A * ((2 * W1(distance, smoothingRadius)) / distance);
 
@@ -247,15 +252,7 @@ public class EularianFluid : MonoBehaviour
 			if (otherParticle != null)
 			{
 				float dist = (otherParticle.position - particle.position).magnitude;
-				float influence = W(dist,smoothingRadius);
-				if (dist > nearDensityThreashhold)
-				{
-					influence = W(dist, smoothingRadius);
-				}
-				else
-				{
-					influence = SmoothingFunction(dist, smoothingRadius);
-				}
+				float influence = W(dist, smoothingRadius);
 
 				density += influence * mass;
 			}
@@ -263,7 +260,7 @@ public class EularianFluid : MonoBehaviour
 		}
 		return density;
 	}
-	
+
 	private float CalculateDensityAtPosition(Vector2 position)
 	{
 		float density = 0;
@@ -273,15 +270,7 @@ public class EularianFluid : MonoBehaviour
 			if (otherParticle != null)
 			{
 				float dist = (otherParticle.position - position).magnitude;
-				float influence = W(dist,smoothingRadius);
-				//if (dist > nearDensityThreashhold)
-				//{
-				//	influence = SmoothingFunction(dist, smoothingRadius);
-				//}
-				//else
-				//{
-				//	influence = SmoothingFunction(dist, smoothingRadius);
-				//}
+				float influence = W(dist, smoothingRadius);
 				density += influence * mass;
 			}
 
@@ -289,44 +278,22 @@ public class EularianFluid : MonoBehaviour
 		return density;
 	}
 
-	public float SmoothingFunction(float distance, float radius)
-	{
-		float volume = (Mathf.PI * Mathf.Pow(radius, 2)) / 6;
-		if (distance < radius)
-		{
-			float value = Mathf.Pow((distance - radius), 2) / Mathf.Pow(radius, 2);
-			return value / volume;
-		}
-		return 0;
 
-	}
-	public float SmoothingFunctionDerivative(float distance, float radius)
-	{
-		float volume = (Mathf.PI * Mathf.Pow(radius, 2)) / 6;
-
-		if (distance < radius)
-		{
-			float value = (2 * (distance - radius)) / Mathf.Pow(radius, 2);
-			return value / volume;
-		}
-		return 0;
-	}
-
-	private float W(float r,float h)
+	private float W(float r, float h)
 	{
 		float q = (1 / h) * Mathf.Abs(r);
-		float norm = 40/(7 * Mathf.PI * Mathf.Pow(smoothingRadius, 2));
+		float norm = 40 / (7 * Mathf.PI * Mathf.Pow(smoothingRadius, 2));
 		if (0 <= q && q <= 0.5)
 		{
 			return (6 * (Mathf.Pow(q, 3) - Mathf.Pow(q, 2)) + 1) * norm;
 		}
 		else if (0.5 <= q && q <= 1)
 		{
-			return (2 * Mathf.Pow(1-q,3)) * norm;
+			return (2 * Mathf.Pow(1 - q, 3)) * norm;
 		}
 		else
 		{
-				return 0;
+			return 0;
 		}
 	}
 	private float W1(float r, float h)
@@ -346,6 +313,18 @@ public class EularianFluid : MonoBehaviour
 			return 0;
 		}
 	}
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -378,7 +357,7 @@ public class EularianFluid : MonoBehaviour
 			probePosition = Camera.main.ScreenToWorldPoint(Input.mousePosition);
 		}
 		display.text = $"Density: {CalculateDensityAtPosition(probePosition)}";
-		graphics.DrawCircle(probePosition.x,probePosition.y,smoothingRadius,new Color(1,0,0,.5f));
+		graphics.DrawCircle(probePosition.x, probePosition.y, smoothingRadius, new Color(1, 0, 0, .5f));
 	}
 
 
@@ -427,7 +406,7 @@ public class EularianFluid : MonoBehaviour
 			float y = yOrigin - rowIndex * radius * 2;
 			float x = xOrigin + radius * 2 * i;
 			float xOffset = rowSize * radius * 2 * rowIndex;
-			particles[i] = new(new(x - xOffset + radius, y-radius), Vector3.zero);
+			particles[i] = new(new(x - xOffset + radius, y - radius), Vector3.zero);
 #if UNITY_EDITOR
 			if (EditorApplication.isPlaying)
 			{
@@ -475,17 +454,17 @@ public class EularianFluid : MonoBehaviour
 		}
 		xPos = -Boundaries.x / 2 - radius - nearDensityThreashhold / 4;
 		yPos = -Boundaries.y / 2 - radius - nearDensityThreashhold / 4;
-		Vector2[] positions = {new(xPos,yPos), new(xPos, -yPos), new(-xPos,yPos), new(-xPos,-yPos) };
-		Vector2[] velocities = {new(1, 1), new(1, -1), new(-1, 1), new(-1, -1) };
+		Vector2[] positions = { new(xPos, yPos), new(xPos, -yPos), new(-xPos, yPos), new(-xPos, -yPos) };
+		Vector2[] velocities = { new(1, 1), new(1, -1), new(-1, 1), new(-1, -1) };
 		for (int i = 0; i < 4; i++)
 		{
 			int index = (int)(widthParticleCount + heightParticleCount) + i;
 			NewParticle(ref edgeParticles, index, positions[i], velocities[i]);
 		}
 	}
-	private void NewParticle(ref EularianParticle[] array,int index,Vector2 position,Vector2 velocity)
+	private void NewParticle(ref EularianParticle[] array, int index, Vector2 position, Vector2 velocity)
 	{
-		array[index] = new EularianParticle(position,(velocity/2 + gravity) * 0);
+		array[index] = new EularianParticle(position, (velocity / 2 + gravity) * 0);
 		(int x, int y) = array[index].GetIndexPair();
 		grid[x, y].Add(array[index]);
 	}

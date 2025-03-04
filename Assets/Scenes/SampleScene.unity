@@ -167,17 +167,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 52f8b8fbb0ba04b4da1baf44ef0e76e6, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  radius: 0.1
-  smoothingRadius: 1
-  targetDensity: 1
-  pressureForce: 1
-  externalForce: {x: 0, y: 0}
-  viscosity: 1
-  nearDensityThreashhold: 0.2
-  collisionDamping: 0.95
-  population: 100
-  Bounds: {x: 10, y: 10}
-  display: {fileID: 412443845}
 --- !u!1 &88329615
 GameObject:
   m_ObjectHideFlags: 0
@@ -748,14 +737,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5aaa9597ba485af4d856b8a06f19f9ec, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  population: 474
+  population: 315
   collisionDamping: 0.95
   Boundaries: {x: 20, y: 10}
   gravity: {x: 0, y: -0.5}
   radius: 0.1
   smoothingRadius: 1
   nearDensityThreashhold: 1
-  targetDensity: 3.5
+  targetDensity: 10
   pressureForce: 10
   viscosityStrenght: 0.3
   display: {fileID: 412443845}
@@ -765,6 +754,7 @@ MonoBehaviour:
   mass: 1
   edgeParticleDist: 0.3
   densityError: 1
+  timeStep: 0.01
 --- !u!4 &1079331498
 Transform:
   m_ObjectHideFlags: 0
